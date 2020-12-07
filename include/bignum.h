@@ -49,4 +49,7 @@ void        fprintBinary(FILE* fp, BIG_BINARY* pBinary);
 bool        IsEqual(BIG_DECIMAL* A, BIG_DECIMAL* B);
 bool        IsBigger(BIG_DECIMAL* A, BIG_DECIMAL* B);
 
+BIG_DECIMAL PLUS(BIG_DECIMAL* A, BIG_DECIMAL* B);
+BIG_DECIMAL PlusDigit(BIG_DECIMAL* A, uint8_t digit);
+
 #endif  //!__BIGNUM__H__

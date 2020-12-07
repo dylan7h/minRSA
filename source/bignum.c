@@ -172,3 +172,98 @@ bool IsBigger(BIG_DECIMAL* A, BIG_DECIMAL* B)
     return true;
 }
 
+BIG_DECIMAL PLUS(BIG_DECIMAL* A, BIG_DECIMAL* B)
+{
+    BIG_DECIMAL result;
+    uint32_t    min, max;
+    uint32_t    size, i;
+    uint8_t     temp;
+
+    BIG_DECIMAL* biggerNum = (A->size > B->size) ? A : B;
+
+    min = (A->size > B->size) ? B->size : A->size;
+    max = (A->size > B->size) ? A->size : B->size;
+
+    size = max + 1;
+    result.digit = (uint8_t*)malloc(size);
+    for(i = 0, temp = 0; i < min; i++)
+    {
+        result.digit[i] = A->digit[i] + B->digit[i] + temp;
+        if(result.digit[i] > 0x09U)
+        {
+            temp = 0x01U;
+        }
+        else
+        {
+            temp = 0x00U;
+        }
+
+        result.digit[i] %= 0x0AU;
+    }
+
+    for(; i < max; i++)
+    {
+        result.digit[i] = biggerNum->digit[i] + temp;
+        if(result.digit[i] > 0x09U)
+        {
+            temp = 0x01U;
+        }
+        else
+        {
+            temp = 0x00U;
+        }
+        
+        result.digit[i] %= 0x0A;
+    }
+
+    if(temp != 0U)
+    {
+        result.digit[i] = temp;
+        result.size = size;
+    }
+    else
+    {
+        result.size = size - 1;
+    }
+    
+    result.sign = false;
+
+    return result;
+}
+
+BIG_DECIMAL PlusDigit(BIG_DECIMAL* A, uint8_t digit)
+{
+    BIG_DECIMAL result;
+
+    int32_t i;
+    uint32_t size;
+    uint8_t temp;
+
+    size = A->size + 1U;
+    result.digit = (uint8_t*)malloc(size);
+
+    result.digit[0]  = A->digit[0]       +   digit;
+    temp             = result.digit[0]   /   0x0AU;
+    result.digit[0] %= 0x0AU;
+
+    for(i = 1; i < A->size; i++)
+    {
+        result.digit[i]  = A->digit[i]       +   temp;
+        temp             = result.digit[i]   /   0x0AU;
+        result.digit[i] %= 0x0AU;
+    }
+
+    if(temp != 0U)
+    {
+        result.digit[i] = temp;
+        result.size = size;
+    }
+    else
+    {
+        result.size = size;
+    }
+    
+    result.sign = A->sign;
+
+    return result;
+}
