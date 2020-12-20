@@ -7,12 +7,14 @@ enable_testing()
 list(APPEND INCLUDE_PATH include)
 
 list(APPEND SOURCE_FILE source/bignum.c)
+list(APPEND SOURCE_FILE source/util.c)
 list(APPEND SOURCE_FILE source/minRSA.c)
 list(APPEND SOURCE_FILE source/main.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILE})
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${INCLUDE_PATH})
+target_link_libraries(${PROJECT_NAME} c)
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY C_STANDARD 99)
 

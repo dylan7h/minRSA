@@ -1,269 +1,345 @@
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "util.h"
 #include "bignum.h"
 
-BIG_DECIMAL CreateDecimal(char strVal[], int32_t size)
+#define OPERAND_A       (0U)
+#define OPERAND_B       (1U)
+#define OPERAND_S       (2U)
+#define MAX_OF_OPERAND  (3U)
+
+static uint8_t HexString2Nibble(char strHex)
 {
-    BIG_DECIMAL decimal;
-    int32_t i;
+    uint8_t ret = 0U;
 
-    decimal.digit = (uint8_t*)malloc(size);
-    for(i = 0; i < size; i++)
+    if((strHex >= 'A') && (strHex <= 'F'))
     {
-        decimal.digit[i] = strVal[size - (i + 1)] - '0';
+        ret = (uint8_t)strHex - (uint8_t)'A' + 0x0AU;
     }
-
-    decimal.sign = false;
-    decimal.size = size;
-
-    return decimal;
-}
-
-void printDecimal(BIG_DECIMAL* pDeciaml)
-{
-    int32_t i;
-
-    if(pDeciaml->sign == true)
+    else if((strHex >= 'a') && (strHex <= 'f'))
     {
-        putc('-', stdout);
+        ret = (uint8_t)strHex - (uint8_t)'a' + 0x0AU;
     }
-
-    for(i = pDeciaml->size - 1; i >= 0; i--)
+    else if((strHex >= '0') && (strHex <= '9'))
     {
-        putc(pDeciaml->digit[i] + '0', stdout);
-    }
-    putc('\r', stdout);
-    putc('\n', stdout);
-}
-
-void fprintDecimal(FILE* fp, BIG_DECIMAL* pDeciaml)
-{
-    int32_t i;
-
-    if(pDeciaml->sign == true)
-    {
-        putc('-', fp);
-    }
-
-    for(i = pDeciaml->size - 1; i >= 0; i--)
-    {
-        putc(pDeciaml->digit[i] + '0', fp);
-    }
-    putc('\r', fp);
-    putc('\n', fp);
-}
-
-BIG_BINARY CreateBinary(uint8_t bytes[], int32_t length)
-{
-    BIG_BINARY binary;
-    int32_t i;
-
-    binary.byte = (uint8_t*)malloc(length);
-    for(i = 0; i < length; i++)
-    {
-        binary.byte[i] = bytes[length - (i + 1)];
-    }
-    binary.size = length;
-
-    return binary;
-}
-
-void printBinary(BIG_BINARY* pBinary)
-{
-    int i, j;
-    uint8_t flag;
-
-    for(i = pBinary->size - 1; i >= 0; i--)
-    {
-        flag = 0x80U;
-
-        for(j = 0; j < 8; j++)
-        {
-            if((pBinary->byte[i] & flag) != 0U)
-            {
-                putc('1', stdout);
-            }
-            else
-            {
-                putc('0', stdout);
-            }
-            
-            flag >>= 1U;
-        }
-    }
-    putc('\r', stdout);
-    putc('\n', stdout);
-}
-
-void fprintBinary(FILE* fp, BIG_BINARY* pBinary)
-{
-    int i, j;
-    uint8_t flag;
-
-    for(i = pBinary->size - 1; i >= 0; i--)
-    {
-        flag = 0x80U;
-
-        for(j = 0; j < 8; j++)
-        {
-            if((pBinary->byte[i] & flag) != 0U)
-            {
-                putc('1', fp);
-            }
-            else
-            {
-                putc('0', fp);
-            }
-            
-            flag >>= 1U;
-        }
-    }
-    putc('\r', fp);
-    putc('\n', fp);
-}
-
-bool IsEqual(BIG_DECIMAL* A, BIG_DECIMAL* B)
-{
-    int32_t i;
-
-    if(A->size != B->size)
-    {
-        return false;
-    }
-
-    for(i = 0; i < A->size; i++)
-    {
-        if(A->digit[i] != B->digit[i])
-        {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool IsBigger(BIG_DECIMAL* A, BIG_DECIMAL* B)
-{
-    int32_t i;
-
-    if(A->size > B->size)
-    {
-        return true;
-    }
-    else if (A->size < B->size)
-    {
-        return false;
+        ret = (uint8_t)strHex - (uint8_t)'0';
     }
     else
-    {
-        for(i = A->size - 1; i >= 0; i--)
-        {
-            if(A->digit[i] > B->digit[i])
-            {
-                return true;
-            }
-            else if(A->digit[i] < B->digit[i])
-            {
-                return false;
-            }
-        }
+    {   
+        ret = 0xFF;
     }
-    
-    return true;
+
+    return ret;
 }
 
-BIG_DECIMAL PLUS(BIG_DECIMAL* A, BIG_DECIMAL* B)
+static eBigIntegerSts_t OperatorAdd128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
 {
-    BIG_DECIMAL result;
-    uint32_t    min, max;
-    uint32_t    size, i;
-    uint8_t     temp;
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+    volatile uint32_t carry = 0U;
+    volatile uint32_t i;
 
-    BIG_DECIMAL* biggerNum = (A->size > B->size) ? A : B;
-
-    min = (A->size > B->size) ? B->size : A->size;
-    max = (A->size > B->size) ? A->size : B->size;
-
-    size = max + 1;
-    result.digit = (uint8_t*)malloc(size);
-    for(i = 0, temp = 0; i < min; i++)
+    for(i = 0U; i < 4U; i += 1U)
     {
-        result.digit[i] = A->digit[i] + B->digit[i] + temp;
-        if(result.digit[i] > 0x09U)
+        S->memory[i] = A->memory[i] + B->memory[i] + carry;
+        if(S->memory[i] <  A->memory[i])
         {
-            temp = 0x01U;
+            carry = 1U;
         }
         else
         {
-            temp = 0x00U;
+            carry = 0U;
         }
-
-        result.digit[i] %= 0x0AU;
     }
 
-    for(; i < max; i++)
+    if(carry != 0U)
     {
-        result.digit[i] = biggerNum->digit[i] + temp;
-        if(result.digit[i] > 0x09U)
+        Ret = BIG_INT_STS_OVERFLOW;
+    }
+
+    return Ret;
+}
+
+static eBigIntegerSts_t OperatorSub128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+    eBigIntegerSts_t result;
+    volatile uint32_t carry = 0U;
+    volatile uint32_t i;
+
+    result = CMP128(A, B);
+    if(result == BIG_INT_STS_A_IS_BIGGER)
+    {
+        for(i = 0U; i < 4U; i += 1U)
         {
-            temp = 0x01U;
+            S->memory[i] = A->memory[i] - B->memory[i] - carry;
+            if(S->memory[i] >  A->memory[i])
+            {
+                carry = 1U;
+            }
+            else
+            {
+                carry = 0U;
+            }
+        }
+        S->bSign = false;
+    }
+    else if(result == BIG_INT_STS_B_IS_BIGGER)
+    {
+        for(i = 0U; i < 4U; i += 1U)
+        {
+            S->memory[i] = B->memory[i] - A->memory[i] - carry;
+            if(S->memory[i] >  B->memory[i])
+            {
+                carry = 1U;
+            }
+            else
+            {
+                carry = 0U;
+            }
+        }     
+        S->bSign = true;   
+    }
+    else if(result == BIG_INT_STS_EQUAL_A_B)
+    {
+        S->bSign = false;
+    }
+    else
+    {
+        /* code */
+    }
+
+    return Ret;
+}
+
+eBigIntegerSts_t HexStr2BigInt(bool bSign, char HexString[], LPBigInteger128_t S)
+{
+    volatile int32_t i, j, k;
+    int32_t length;
+    uint8_t value;
+    uint8_t* pos = (uint8_t*)S->memory;
+    char* strPos;
+    bool bIsHighByte = false;
+
+    if((HexString[0] == '0') && (HexString[1] == 'x'))
+    {
+        strPos = &HexString[2];
+        for(i = 0; strPos[i] != '\0'; i += 1);
+        length = i;
+
+        Memset32U(S->memory, 0U, CNT_OF_WORDS_128BIT);
+
+        k = 0;
+        j = CNT_OF_BYTES_128BIT - 4;
+        for(i = (length - 1); i > -1; i -= 1)
+        {
+            value = HexString2Nibble(strPos[i]);
+            if(bIsHighByte == true)
+            {
+                pos[j + k] |= (value << 4);
+                bIsHighByte = false;
+                k += 1;
+                if(k == 4)
+                {
+                    k = 0;
+                    j -= 4;
+                }
+            }
+            else
+            {
+                pos[j + k] = value;
+                bIsHighByte = true;
+            }
+        }
+    }
+    else
+    {
+        /* code */
+    }
+    S->bSign = bSign;
+
+    return BIG_INT_STS_SUCCESS;
+}
+
+eBigIntegerSts_t ADD128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+    BigInteger128_t Operand[3U];
+
+    Memcpy32U(true, Operand[OPERAND_A].memory, A->memory, CNT_OF_WORDS_128BIT);
+    Memcpy32U(true, Operand[OPERAND_B].memory, B->memory, CNT_OF_WORDS_128BIT);
+
+    Operand[OPERAND_A].bSign = A->bSign;
+    Operand[OPERAND_B].bSign = B->bSign;
+
+    Memset32U(Operand[OPERAND_S].memory, 0U, CNT_OF_WORDS_128BIT);
+
+    /* 01. S(+) = A(+) + B(+) */
+    if((A->bSign == false) && (B->bSign == false))
+    {
+        Ret = OperatorAdd128(&Operand[OPERAND_A], &Operand[OPERAND_B], &Operand[OPERAND_S]);
+    }
+    /* 02. S = A(+) + B(-) */
+    else if((A->bSign == false) && (B->bSign == true))
+    {
+        Ret = OperatorSub128(&Operand[OPERAND_A], &Operand[OPERAND_B], &Operand[OPERAND_S]);
+    }
+    /* 03. S = A(-) + B(+) */
+    else if((A->bSign == true) && (B->bSign == true))
+    {
+        Ret = OperatorSub128(&Operand[OPERAND_B], &Operand[OPERAND_A], &Operand[OPERAND_S]);
+    }
+    /* 04. S(-) = A(-) + B(-) */
+    else if((A->bSign == true) && (B->bSign == true))
+    {
+        Ret = OperatorAdd128(&Operand[OPERAND_A], &Operand[OPERAND_B], &Operand[OPERAND_S]);
+        Operand[OPERAND_S].bSign = true;
+    }
+
+    Memcpy32U(true, S->memory , Operand[OPERAND_S].memory, 4U);
+    S->bSign = Operand[OPERAND_S].bSign;
+
+    return Ret;
+}
+
+eBigIntegerSts_t SUB128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+    BigInteger128_t Operand[3U];
+
+    Memcpy32U(true, Operand[OPERAND_A].memory, A->memory, 4U);
+    Memcpy32U(true, Operand[OPERAND_B].memory, B->memory, 4U);
+
+    Operand[OPERAND_A].bSign = A->bSign;
+    Operand[OPERAND_B].bSign = B->bSign;
+
+    Memset32U(Operand[OPERAND_S].memory, 0U, CNT_OF_WORDS_128BIT);
+
+    /* 01. S = A(+) - B(+) */
+    if((A->bSign == false) && (B->bSign == false))
+    {
+        Ret = OperatorSub128(&Operand[OPERAND_A], &Operand[OPERAND_B], &Operand[OPERAND_S]);
+    }
+    /* 02. S(+) = A(+) - B(-) */
+    else if((A->bSign == false) && (B->bSign == true))
+    {
+        Ret = OperatorAdd128(&Operand[OPERAND_A], &Operand[OPERAND_B], &Operand[OPERAND_S]);
+    }
+    /* 03. S(-) = A(-) - B(+) */
+    else if((A->bSign == true) && (B->bSign == true))
+    {
+        Ret = OperatorAdd128(&Operand[OPERAND_B], &Operand[OPERAND_A], &Operand[OPERAND_S]);
+        Operand[OPERAND_S].bSign = true;
+    }
+    /* 04. S = A(-) - B(-) */
+    else if((A->bSign == true) && (B->bSign == true))
+    {
+        Ret = OperatorSub128(&Operand[OPERAND_B], &Operand[OPERAND_A], &Operand[OPERAND_S]);
+    }
+
+    Memcpy32U(true, S->memory , Operand[OPERAND_S].memory, 4U);
+    S->bSign = Operand[OPERAND_S].bSign;
+
+    return Ret;
+}
+
+eBigIntegerSts_t MUL128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+
+    return Ret;
+}
+
+eBigIntegerSts_t DIV128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+
+    return Ret;
+}
+
+eBigIntegerSts_t MOD128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+
+    return Ret;
+}
+
+eBigIntegerSts_t AND128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+
+    return Ret;
+}
+
+eBigIntegerSts_t OR128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+
+    return Ret;
+}
+
+eBigIntegerSts_t NOT128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+
+    return Ret;
+}
+
+eBigIntegerSts_t XOR128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
+
+    return Ret;
+}
+
+eBigIntegerSts_t CMP128(LPBigInteger128_t A, LPBigInteger128_t B)
+{
+    eBigIntegerSts_t Ret = BIG_INT_STS_EQUAL_A_B;
+    volatile uint32_t i = CNT_OF_WORDS_128BIT;
+
+    do {
+        i -= 1U;
+        if(A->memory[i] > B->memory[i])
+        {
+            Ret = BIG_INT_STS_A_IS_BIGGER;
+            break;
+        }
+        else if(A->memory[i] < B->memory[i])
+        {
+            Ret = BIG_INT_STS_B_IS_BIGGER;
+            break;
+        }
+        else if(A->memory[i] == B->memory[i])
+        {
+            Ret = BIG_INT_STS_EQUAL_A_B;
         }
         else
         {
-            temp = 0x00U;
+            /* code */
         }
-        
-        result.digit[i] %= 0x0A;
-    }
+    } while(i != 0U);
 
-    if(temp != 0U)
-    {
-        result.digit[i] = temp;
-        result.size = size;
-    }
-    else
-    {
-        result.size = size - 1;
-    }
-    
-    result.sign = false;
-
-    return result;
+    return Ret;
 }
 
-BIG_DECIMAL PlusDigit(BIG_DECIMAL* A, uint8_t digit)
+eBigIntegerSts_t ASSIGN128(LPBigInteger128_t A, LPBigInteger128_t B)
 {
-    BIG_DECIMAL result;
+    eBigIntegerSts_t Ret = BIG_INT_STS_SUCCESS;
 
-    int32_t i;
-    uint32_t size;
-    uint8_t temp;
+    return Ret;
+}
 
-    size = A->size + 1U;
-    result.digit = (uint8_t*)malloc(size);
+void printBigInt128(char Message[], LPBigInteger128_t BigInt)
+{
+    volatile uint32_t i;
 
-    result.digit[0]  = A->digit[0]       +   digit;
-    temp             = result.digit[0]   /   0x0AU;
-    result.digit[0] %= 0x0AU;
+    printf("[%s]\n", Message);
 
-    for(i = 1; i < A->size; i++)
+    printf(">> sign: %s\n", BigInt->bSign ? "true" : "false");
+    fputs(">> value: 0x", stdout);
+    for(i = 0U; i < 4U; i += 1U)
     {
-        result.digit[i]  = A->digit[i]       +   temp;
-        temp             = result.digit[i]   /   0x0AU;
-        result.digit[i] %= 0x0AU;
+        printf("%08X", BigInt->memory[i]);
     }
-
-    if(temp != 0U)
-    {
-        result.digit[i] = temp;
-        result.size = size;
-    }
-    else
-    {
-        result.size = size;
-    }
-    
-    result.sign = A->sign;
-
-    return result;
+    putc('\n', stdout);
 }

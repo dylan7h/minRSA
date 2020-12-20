@@ -1,55 +1,59 @@
 #ifndef __BIGNUM__H__
 #define __BIGNUM__H__
 
-#include <stdint.h>
-#include <stdbool.h>
+#define CNT_OF_BYTES_128BIT     (16)
+#define CNT_OF_WORDS_128BIT     (4)
 
-/* 
-    int32_t num = 7251326;
-    uint8_t arr = { 0x06, 0x02, 0x03, 0x01, 0x05, 0x02, 0x07 };
-    | 6 | 2 | 3 | 1 | 5 | 2 | 7 |
+/* Little Endian(Intel X86_64) - LSB First
+    val: 0x12345678
+                    LSB                        MSB
+    ┌────────────┬────────┬────────┬────────┬────────┐
+    │addr offset │  0x00  │  0x01  │  0x02  │  0x03  │  
+    ├────────────┼────────┼────────┼────────┼────────┤
+    │    val     │  0x78  │  0x56  │  0x34  │  0x12  │   
+    └────────────┴────────┴────────┴────────┴────────┘
  */
 
+/* Big Endian(RISC) - MSB First
+    val: 0x12345678
+                     MSB                       LSB 
+    ┌────────────┬────────┬────────┬────────┬────────┐
+    │addr offset │  0x00  │  0x01  │  0x02  │  0x03  │  
+    ├────────────┼────────┼────────┼────────┼────────┤
+    │    val     │  0x12  │  0x34  │  0x56  │  0x78  │   
+    └────────────┴────────┴────────┴────────┴────────┘
+ */
+
+typedef enum 
+{
+    BIG_INT_STS_A_IS_BIGGER = -1,
+    BIG_INT_STS_EQUAL_A_B   =  0,
+    BIG_INT_STS_B_IS_BIGGER =  1,
+    BIG_INT_STS_SUCCESS     =  2, 
+    BIG_INT_STS_OVERFLOW    =  3, 
+    BIG_INT_STS_DIV_AS_ZERO =  4
+} eBigIntegerSts_t;
+
 typedef struct 
 {
-    uint8_t*    ptrSpace;       /* buffer address   */
-    int32_t     size;           /* buffer size      */
-    bool        sign;           /* signed flag      */
-} BIG_NUMBER;
+    uint32_t    memory[CNT_OF_WORDS_128BIT];
+    bool        bSign;
+} BigInteger128_t, *LPBigInteger128_t;
 
-typedef struct 
-{
-    uint8_t*    ptrSpace;       /* buffer address   */
-    int32_t     size;           /* buffer size      */
-    int32_t     deciamlPoint;   /* decimal point    */
-    bool        sign;           /* signed flag      */
-} BIG_FLOAT;
+eBigIntegerSts_t HexStr2BigInt(bool bSign, char HexString[], LPBigInteger128_t S);
 
-typedef struct
-{
-    uint8_t*    digit;          /* buffer address   */
-    int32_t     size;           /* buffer size      */
-    bool        sign;           /* signed flag      */
-} BIG_DECIMAL;
+eBigIntegerSts_t ADD128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S);
+eBigIntegerSts_t SUB128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S);
+eBigIntegerSts_t MUL128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S);
+eBigIntegerSts_t DIV128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S);
+eBigIntegerSts_t MOD128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S);
+eBigIntegerSts_t AND128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S);
+eBigIntegerSts_t OR128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S);
+eBigIntegerSts_t NOT128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S);
+eBigIntegerSts_t XOR128(LPBigInteger128_t A, LPBigInteger128_t B, LPBigInteger128_t S);
+eBigIntegerSts_t CMP128(LPBigInteger128_t A, LPBigInteger128_t B);
+eBigIntegerSts_t ASSIGN128(LPBigInteger128_t A, LPBigInteger128_t B);
 
-typedef struct
-{
-    uint8_t*    byte;           /* buffer address   */
-    int32_t     size;           /* buffer size      */
-} BIG_BINARY;
-
-BIG_DECIMAL CreateDecimal(char strVal[], int32_t size);
-void        printDecimal(BIG_DECIMAL* pDeciaml);
-void        fprintDecimal(FILE* fp, BIG_DECIMAL* pDeciaml);
-
-BIG_BINARY  CreateBinary(uint8_t bytes[], int32_t length);
-void        printBinary(BIG_BINARY* pBinary);
-void        fprintBinary(FILE* fp, BIG_BINARY* pBinary);
-
-bool        IsEqual(BIG_DECIMAL* A, BIG_DECIMAL* B);
-bool        IsBigger(BIG_DECIMAL* A, BIG_DECIMAL* B);
-
-BIG_DECIMAL PLUS(BIG_DECIMAL* A, BIG_DECIMAL* B);
-BIG_DECIMAL PlusDigit(BIG_DECIMAL* A, uint8_t digit);
+void printBigInt128(char Message[], LPBigInteger128_t BigInt);
 
 #endif  //!__BIGNUM__H__

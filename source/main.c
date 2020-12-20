@@ -1,21 +1,28 @@
 #include <stdio.h>
-#include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "util.h"
 #include "bignum.h"
 
 int main(void)
 {
-    BIG_DECIMAL A, B, result;
+    BigInteger128_t A, B, S;
 
-    A = CreateDecimal("51359", strlen("51359"));
-    B = CreateDecimal("99962763", strlen("99962763"));
+    HexStr2BigInt(false, "0x123456789ABCDEF12", &A);
+    HexStr2BigInt(false, "0x12121212121212121", &B);
+    
+    printBigInt128("A", &A);
+    printBigInt128("B", &B);
 
-    result = PLUS(&A, &B);
-    printDecimal(&result);
+    ADD128(&A, &B, &S);
+    printf("[ S = A + B ]\n");
+    printBigInt128("S", &S);
+    printf("\n\n");
 
-    A = CreateDecimal("99995", strlen("99995"));
-
-    result = PlusDigit(&A, 7U);
-    printDecimal(&result);
+    SUB128(&A, &B, &S);
+    printf("[ S = A - B ]\n");
+    printBigInt128("S", &S);
+    printf("\n\n");
 
     return 0;
 }
